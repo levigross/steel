@@ -2949,3 +2949,22 @@ mod resolver_tests {
         );
     }
 }
+
+#[test]
+fn test_set_on_global_is_seen_by_closures_compiled_earlier() {
+    // Each `run` is its own compilation unit. Constant evaluation used to inline a
+    // top-level `(define n 0)` into every closure compiled alongside it, so a later
+    // `set!` changed the global but not what those closures returned.
+    let mut engine = Engine::new();
+    engine.run("(define n 0) (define (get-n) n)").unwrap();
+    engine.run("(set! n 5)").unwrap();
+
+    assert_eq!(engine.run("n").unwrap()[0], SteelVal::IntV(5));
+    assert_eq!(engine.run("(get-n)").unwrap()[0], SteelVal::IntV(5));
+
+    // Local bindings are still folded: every mutation of a local is in scope.
+    let local = engine
+        .run("(define (local-constant) (let ([k 3]) (+ k 1))) (local-constant)")
+        .unwrap();
+    assert_eq!(local.last(), Some(&SteelVal::IntV(4)));
+}
